@@ -7,8 +7,8 @@ function App() {
   const [name, setName] = useState("");
   const [seconds, setSeconds] = useState(-1);
   const [isRunning, setIsRunning] = useState(false);
+  const [selectedDuration, setSelectedDuration] = useState(10);
   const [currentPhrase, setCurrentPhrase] = useState("");
-
 
   const phrases = [
     "Push now — victory won't wait!",
@@ -20,15 +20,15 @@ function App() {
     "Every 'just a bit more' builds greatness.",
     "You're closer than you think.",
     "Crush it. Shock yourself.",
-    "Don't quit. This moment counts."
-  ]
+    "Don't quit. This moment counts.",
+  ];
+
+  const durations = [10, 20, 30];
 
   const getRandomPhrase = () => {
     const randomIndex = Math.floor(Math.random() * phrases.length);
-    return phrases[randomIndex]
-  }
-
-
+    return phrases[randomIndex];
+  };
 
   useEffect(() => {
     let interval: string | number | NodeJS.Timeout | undefined;
@@ -45,7 +45,7 @@ function App() {
   }, [isRunning, seconds]);
 
   const handleTimer = () => {
-    setSeconds(10);
+    setSeconds(selectedDuration);
     setIsRunning(true);
     setCurrentPhrase(getRandomPhrase());
   };
@@ -53,9 +53,8 @@ function App() {
   const resetTimer = () => {
     setSeconds(-1);
     setIsRunning(false);
-    setCurrentPhrase("")
+    setCurrentPhrase("");
   };
-
 
   return (
     <div className="container">
@@ -67,9 +66,23 @@ function App() {
           setName(e.target.value);
         }}
       />
+      <div className="duration-select">
+        <div className="duration-options">
+          {durations.map((duration) => (
+            <button
+              key={duration}
+              className={`duration-option ${
+                selectedDuration === duration ? "active" : ""
+              }`}
+              onClick={() => setSelectedDuration(duration)}
+            >{duration} s</button>
+          ))}
+        </div>
+      </div>
+
       <Button
         className="startButton"
-        disabled={!name.trim() || seconds === null}
+        disabled={!name.trim() || seconds > 0}
         onClick={handleTimer}
       >
         Start
@@ -79,18 +92,17 @@ function App() {
       </Button>
 
       <div>
-        <p>{currentPhrase}</p>
+        <p className="currentPhrase">{currentPhrase}</p>
       </div>
-      
+
       <div className="message-container">
         <h1 className="seconds">
-          {isRunning && seconds > 0 ? `${seconds} seconds left` : ""}
+          {isRunning && seconds > 0 ? `${name}, ${seconds} seconds left` : ""}
         </h1>
         <h1 className="seconds">
           {seconds === 0 ? `You did well ${name}  💪` : ""}
         </h1>
       </div>
-
     </div>
   );
 }
