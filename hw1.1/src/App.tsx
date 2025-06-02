@@ -2,6 +2,8 @@ import "./App.css";
 import { useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "./components/ui/button";
+import { Progress } from "@/components/ui/progress";
+import confetti from 'canvas-confetti';
 
 function App() {
   const [name, setName] = useState("");
@@ -9,6 +11,7 @@ function App() {
   const [isRunning, setIsRunning] = useState(false);
   const [selectedDuration, setSelectedDuration] = useState(10);
   const [currentPhrase, setCurrentPhrase] = useState("");
+  const [progress, setProgress] = useState(100);
 
   const phrases = [
     "Push now — victory won't wait!",
@@ -30,30 +33,66 @@ function App() {
     return phrases[randomIndex];
   };
 
+  const triggerConfetti = () => {
+    const duration = 2 * 1000;
+    const animationEnd = Date.now() + duration;
+    const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 0 };
+
+    function randomInRange(min: number, max: number) {
+      return Math.random() * (max - min) + min;
+    }
+
+    const interval: NodeJS.Timeout = setInterval(function() {
+      const timeLeft = animationEnd - Date.now();
+
+      if (timeLeft <= 0) {
+        return clearInterval(interval);
+      }
+
+      const particleCount = 50 * (timeLeft / duration);
+      
+      confetti({
+        ...defaults,
+        particleCount,
+        origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 }
+      });
+      confetti({
+        ...defaults,
+        particleCount,
+        origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 }
+      });
+    }, 250);
+  };
+
   useEffect(() => {
     let interval: string | number | NodeJS.Timeout | undefined;
 
     if (isRunning && seconds > 0) {
       interval = setInterval(() => {
         setSeconds((prevCount) => prevCount - 1);
+        setProgress((seconds / selectedDuration) * 100);
       }, 1000);
     } else if (seconds === 0) {
       setIsRunning(false);
+      triggerConfetti();
+      setProgress(0);
     }
 
     return () => clearInterval(interval);
-  }, [isRunning, seconds]);
+  }, [isRunning, seconds, selectedDuration]);
 
   const handleTimer = () => {
     setSeconds(selectedDuration);
     setIsRunning(true);
     setCurrentPhrase(getRandomPhrase());
+    setProgress(100);
   };
 
   const resetTimer = () => {
     setSeconds(-1);
     setIsRunning(false);
     setCurrentPhrase("");
+    setProgress(100);
   };
 
   return (
@@ -102,6 +141,9 @@ function App() {
         <h1 className="seconds">
           {seconds === 0 ? `You did well ${name}  💪` : ""}
         </h1>
+        {isRunning && seconds > 0 && (
+          <Progress value={progress} className="w-full mt-4" />
+        )}
       </div>
     </div>
   );
