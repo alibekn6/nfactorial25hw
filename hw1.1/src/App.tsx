@@ -72,7 +72,7 @@ function App() {
         setSeconds((prevCount) => prevCount - 1);
         setProgress((seconds / selectedDuration) * 100);
       }, 1000);
-    } else if (seconds === 0) {
+    } else if (seconds === 0 && isRunning) {
       setIsRunning(false);
       triggerConfetti();
       setProgress(0);
@@ -80,6 +80,9 @@ function App() {
 
     return () => clearInterval(interval);
   }, [isRunning, seconds, selectedDuration]);
+
+
+
 
   const handleTimer = () => {
     setSeconds(selectedDuration);
