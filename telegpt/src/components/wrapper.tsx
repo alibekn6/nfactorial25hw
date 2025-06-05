@@ -1,6 +1,6 @@
 import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useEffect } from "react";
-import { chats } from "../mock/chats"
+import { chats } from "../mock/chats";
 
 export const Wrapper = () => {
   const navigate = useNavigate();
@@ -42,11 +42,16 @@ export const Wrapper = () => {
               key={chat.id}
               to={`/chats/${chat.id}`}
               className={({ isActive }) =>
-                `p-2 rounded border ${
+                `p-2 rounded flex items-center text-l font-medium ${
                   isActive ? "bg-[var(--light-blue)] text-white" : "bg-white"
                 }`
               }
             >
+              <img
+                src={chat.image}
+                alt="user pic"
+                className="w-15 h-15 rounded-full mr-5"
+              />
               {chat.name}
             </NavLink>
           ))}

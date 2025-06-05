@@ -8,7 +8,7 @@ function App() {
   return (
     <Routes>
       <Route path="/" element={<Wrapper />}>
-        <Route path="chats" element={<div className="p-4 text-gray-500">Выберите чат слева</div>} />
+        <Route path="chats" element={<div className="p-4 text-gray-500 text-xl">Выберите чат слева</div>} />
         <Route path="chats/:chatId" element={<ChatView />} />
         <Route path="settings" element={<Settings />} />
       </Route>
