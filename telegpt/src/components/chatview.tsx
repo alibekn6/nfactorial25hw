@@ -1,17 +1,19 @@
-// components/ChatView.tsx
+// src/components/ChatView.tsx
 import "../app/App.css";
 import { useParams } from "react-router-dom";
 import { chats as mockChats, type Chat, type Message } from "../mock/chats";
 import { useEffect, useState } from "react";
+import { useChatCompletion } from "../hooks/useChatCompletion";
+import type { GPTMessage } from "../api/gptService";
 
 export const ChatView = () => {
   const { chatId } = useParams<{ chatId: string }>();
-  const [currentChat, setCurrentChat] = useState<Chat | undefined>(undefined);
   const [allChats, setAllChats] = useState<Chat[]>([]);
+  const [currentChat, setCurrentChat] = useState<Chat | undefined>(undefined);
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState<string>("");
 
-
+  // 1. Загрузка чатов из localStorage / заполняем mock при отсутствии
   useEffect(() => {
     const saved = localStorage.getItem("chats");
     if (!saved) {
@@ -22,23 +24,25 @@ export const ChatView = () => {
         const parsed: Chat[] = JSON.parse(saved);
         setAllChats(parsed);
       } catch (e) {
-        console.log("error parsing chats:", e);
+        console.error("Error parsing chats from localStorage:", e);
         localStorage.setItem("chats", JSON.stringify(mockChats));
         setAllChats(mockChats);
       }
     }
   }, []);
 
+  // 2. Сброс input при переключении чата
   useEffect(() => {
     setInputText("");
   }, [chatId]);
+
+  // 3. Когда список allChats меняется или chatId меняется — выбираем текущий чат
   useEffect(() => {
     if (!chatId) {
       setCurrentChat(undefined);
       setMessages([]);
       return;
     }
-
     const chat = allChats.find((c) => c.id === chatId);
     if (chat) {
       setCurrentChat(chat);
@@ -49,75 +53,11 @@ export const ChatView = () => {
     }
   }, [allChats, chatId]);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setInputText(e.target.value);
-  };
-
-  const handleSend = async () => {
-    if (!inputText.trim() || !currentChat) return;
-
-    const newMsg: Message = {
-      id: Date.now().toString(),
-      from: "Вы",
-      text: inputText.trim(),
-      timestamp: new Date().toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      }),
-    };
-
-    const updatedMessages = [...messages, newMsg];
-    setMessages(updatedMessages);
-    setInputText("");
-
-    const systemMsg =
-      currentChat.personaDescription && currentChat.personaDescription.trim()
-        ? {
-            role: "system" as const,
-            content: currentChat.personaDescription.trim(),
-          }
-        : null;
-
-    // D) Конвертируем обновленную историю в формат OpenAI
-    const chatHistoryMessages = updatedMessages.map((m) => ({
-      role: m.from === "Вы" ? ("user" as const) : ("assistant" as const),
-      content: m.text,
-    }));
-
-    const openaiMessages = systemMsg
-      ? [systemMsg, ...chatHistoryMessages]
-      : [...chatHistoryMessages];
-
-    try {
-      const res = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${import.meta.env.VITE_GPT_API_KEY}`,
-        },
-        body: JSON.stringify({
-          model: "gpt-3.5-turbo",
-          messages: openaiMessages,
-          temperature: 0.7,
-          max_tokens: 512,
-        }),
-      });
-
-      const updatedChatsOptimistic = allChats.map((c) =>
-        c.id === currentChat.id ? { ...c, messages: updatedMessages } : c
-      );
-      setAllChats(updatedChatsOptimistic);
-      localStorage.setItem("chats", JSON.stringify(updatedChatsOptimistic));
-
-      if (!res.ok) {
-        console.error("OpenAI error status:", res.status, await res.text());
-        return;
-      }
-
-      const data = (await res.json()) as {
-        choices: Array<{ message: { role: string; content: string } }>;
-      };
-      const assistantContent = data.choices[0].message.content.trim();
+  // 4. Хук для отправки в GPT
+  const { mutate: sendToGPT, isLoading: isGPTLoading } = useChatCompletion({
+    onSuccess: (assistantContent) => {
+      // Когда GPT вернул ответ, формируем сообщение и записываем в локальный стейт + localStorage
+      if (!currentChat) return;
 
       const assistantMsg: Message = {
         id: Date.now().toString() + "_ai",
@@ -129,19 +69,73 @@ export const ChatView = () => {
         }),
       };
 
+      const newMsgs = [...messages, assistantMsg];
+      // Обновляем локальный стейт сообщений
+      setMessages(newMsgs);
 
-      const updatedWithAI = [...updatedMessages, assistantMsg];
-      setMessages(updatedWithAI);
-
+      // Обновляем allChats и localStorage
       const updatedChatsFinal = allChats.map((c) =>
-        c.id === currentChat.id ? { ...c, messages: updatedWithAI } : c
+        c.id === currentChat.id ? { ...c, messages: newMsgs } : c
       );
       setAllChats(updatedChatsFinal);
       localStorage.setItem("chats", JSON.stringify(updatedChatsFinal));
-    } catch (err) {
-      console.error("Fetch to OpenAI failed:", err);
-    }
-    console.log("OpenAI payload:", JSON.stringify(openaiMessages, null, 2));
+    },
+    onError: (error) => {
+      // Здесь можно показать пользователю уведомление об ошибке, если нужно
+      console.error("GPT Error:", error);
+    },
+  });
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setInputText(e.target.value);
+  };
+
+  const handleSend = () => {
+    if (!inputText.trim() || !currentChat) return;
+
+    // 1. Формируем наше пользовательское сообщение
+    const newMsg: Message = {
+      id: Date.now().toString(),
+      from: "Вы",
+      text: inputText.trim(),
+      timestamp: new Date().toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+    };
+
+    // 2. Оптимистично обновляем локальный стейт
+    const updatedMessages = [...messages, newMsg];
+    setMessages(updatedMessages);
+    setInputText("");
+
+    // 3. Обновляем локальное хранилище чатов
+    const updatedChatsOptimistic = allChats.map((c) =>
+      c.id === currentChat.id ? { ...c, messages: updatedMessages } : c
+    );
+    setAllChats(updatedChatsOptimistic);
+    localStorage.setItem("chats", JSON.stringify(updatedChatsOptimistic));
+
+    // 4. Готовим массив сообщений для OpenAI (в формате GPTMessage)
+    const systemMsg: GPTMessage | null =
+      currentChat.personaDescription && currentChat.personaDescription.trim()
+        ? {
+            role: "system",
+            content: currentChat.personaDescription.trim(),
+          }
+        : null;
+
+    const chatHistoryMessages: GPTMessage[] = updatedMessages.map((m) => ({
+      role: m.from === "Вы" ? "user" : "assistant",
+      content: m.text,
+    }));
+
+    const openaiMessages: GPTMessage[] = systemMsg
+      ? [systemMsg, ...chatHistoryMessages]
+      : [...chatHistoryMessages];
+
+    // 5. Посылаем в GPT (через useMutation)
+    sendToGPT(openaiMessages);
   };
 
   if (!currentChat) {
@@ -198,6 +192,7 @@ export const ChatView = () => {
           ))
         )}
       </div>
+
       <div className="mt-2 border-t flex items-center gap-2 bg-[var(--bg-primary)] p-4">
         <input
           type="text"
@@ -211,12 +206,14 @@ export const ChatView = () => {
               handleSend();
             }
           }}
+          disabled={isGPTLoading}
         />
         <button
           className="bg-[var(--primary-blue)] text-white px-4 py-2 rounded"
           onClick={handleSend}
+          disabled={isGPTLoading}
         >
-          Отправить
+          {isGPTLoading ? "Пишет..." : "Отправить"}
         </button>
       </div>
     </div>
